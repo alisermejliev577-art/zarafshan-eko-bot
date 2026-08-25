@@ -30,7 +30,7 @@ bot.on('photo', async (msg) => {
   try {
     const fileLink = await bot.getFileLink(userCache[chatId].photoId);
     const base64Data = await downloadFileAsBase64(fileLink);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
     const result = await model.generateContent([
       "Проанализируй фото мусора/загрязнения. Напиши уровень загрязнения (1-10) и краткий комментарий. Формат: '✅ Анализ Gemini: [Комментарий] (Уровень [X]/10)'", 
