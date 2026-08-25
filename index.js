@@ -4,7 +4,7 @@ const express = require('express');
 const https = require('https');
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = console.log("Проверка ключа Gemini:", process.env.GEMINI_API_KEY ? "Ключ на месте ✅" : "КЛЮЧА НЕТ ❌");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
