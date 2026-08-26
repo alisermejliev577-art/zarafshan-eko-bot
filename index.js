@@ -2,11 +2,6 @@ const TelegramBot = require('node-telegram-bot-api');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const express = require('express');
 const https = require('https');
-const TelegramBot = require('node-telegram-bot-api');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const express = require('express');
-const https = require('https');
-const { getRandomAnalysis } = require('./helpers');
 const { getRandomAnalysis } = require('./helpers');
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
