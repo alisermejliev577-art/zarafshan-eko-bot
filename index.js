@@ -9,7 +9,7 @@ const https = require('https');
 const { getRandomAnalysis } = require('./helpers');
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 console.log("Проверка ключа Gemini:", process.env.GEMINI_API_KEY ? "Ключ на месте ✅" : "КЛЮЧА НЕТ ❌");
 const app = express();
