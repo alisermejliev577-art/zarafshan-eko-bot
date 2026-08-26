@@ -61,7 +61,7 @@ bot.on('message', (msg) => {
     } else if (text === "ℹ️ О проекте") {
         bot.sendMessage(chatId, "🌱 **Zarafshan Eko Bot** — эко-проект для мониторинга и анализа загрязнений окружающей среды при помощи ИИ.");
     }
-});
+});bot.on('photo', async (msg) => {
   const chatId = msg.chat.id;
   userCache[chatId] = { photoId: msg.photo[msg.photo.length - 1].file_id };
   
