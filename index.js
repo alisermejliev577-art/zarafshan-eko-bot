@@ -71,3 +71,59 @@ app.get('/api/healthz', (req, res) => res.send('OK'));
 app.listen(PORT, () => {
   console.log(`Server started on port ${PORT}`);
 });
+// ==========================================
+// НОВЫЕ ФУНКЦИИ (ВСТАВИТЬ В САМЫЙ КОНЕЦ ФАЙЛА)
+// ==========================================
+
+// Переменная для подсчета отчетов
+if (typeof userReportCount === 'undefined') {
+    var userReportCount = {};
+}
+
+// 1. Команды /start и /help
+bot.onText(/\/(start|help)/, (msg) => {
+    const chatId = msg.chat.id;
+    const senderName = msg.from.first_name;
+
+    const welcomeText = 
+        `👋 *Привет, ${senderName}! Я Zarafshan Eko Bot.*\n\n` +
+        `📸 *Пришли фото мусора* — я проведу эко-анализ загрязнения.\n` +
+        `📍 *Отправь геолокацию* — зафиксируем точку на карте.\n` +
+        `📊 *Команда /stats* — узнать свой уровень и количество отчётов.`;
+
+    bot.sendMessage(chatId, welcomeText, { parse_mode: 'Markdown' });
+});
+
+// 2. Команда /stats — Статистика
+bot.onText(/\/stats/, (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const count = userReportCount[userId] || 0;
+
+    let rank = "🌱 Новичок";
+    if (count >= 5) rank = "🌿 Эко-Активист";
+    if (count >= 15) rank = "🏆 Защитник Зарафшана";
+
+    const statsText = 
+        `📊 *Твоя статистика:*\n\n` +
+        `📸 Отправлено отчётов: *${count}*\n` +
+        `🎖️ Твой статус: *${rank}*`;
+
+    bot.sendMessage(chatId, statsText, { parse_mode: 'Markdown' });
+});
+
+// 3. Обработка геолокации
+bot.on('location', (msg) => {
+    const chatId = msg.chat.id;
+    const { latitude, longitude } = msg.location;
+    const senderName = msg.from.username ? `@${msg.from.username}` : msg.from.first_name;
+
+    const replyText = 
+        `📍 *Геолокация принята!*\n\n` +
+        `👤 *Отправитель:* ${senderName}\n` +
+        `🌐 *Широта:* \`${latitude}\`\n` +
+        `🌐 *Долгота:* \`${longitude}\`\n\n` +
+        `✅ Точка занесена в реестр экологического мониторинга!`;
+
+    bot.sendMessage(chatId, replyText, { parse_mode: 'Markdown' });
+});
