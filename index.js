@@ -31,7 +31,37 @@ function downloadFileAsBase64(url) {
   });
 }
 
-bot.on('photo', async (msg) => {
+bot.on('photo', // Команда /start — отправляет приветствие и создает меню кнопок
+bot.onText(/\/start/, (msg) => {
+    const chatId = msg.chat.id;
+    
+    bot.sendMessage(chatId, "👋 **Добро пожаловать в Zarafshan Eko Bot!**\n\nВыберите нужный раздел из меню ниже:", {
+        parse_mode: 'Markdown',
+        reply_markup: {
+            keyboard: [
+                [{ text: "📸 Инструкция по фото" }, { text: "📍 Как отправить гео" }],
+                [{ text: "📊 Статистика" }, { text: "ℹ️ О проекте" }]
+            ],
+            resize_keyboard: true
+        }
+    });
+});
+
+// Обработчик нажатий на кнопки меню
+bot.on('message', (msg) => {
+    const chatId = msg.chat.id;
+    const text = msg.text;
+
+    if (text === "📸 Инструкция по фото") {
+        bot.sendMessage(chatId, "Просто отправьте фотографию экологической проблемы или мусора прямо в этот чат, и нейросеть проведёт её анализ.");
+    } else if (text === "📍 Как отправить гео") {
+        bot.sendMessage(chatId, "Нажмите на значок **скрепки 📎** внизу экрана и выберите **«Геопозиция»**, чтобы отправить координаты объекта.");
+    } else if (text === "📊 Статистика") {
+        bot.sendMessage(chatId, "📊 **Статистика бота:**\n— Проанализировано фото: 12\n— Обработано локаций: 5");
+    } else if (text === "ℹ️ О проекте") {
+        bot.sendMessage(chatId, "🌱 **Zarafshan Eko Bot** — эко-проект для мониторинга и анализа загрязнений окружающей среды при помощи ИИ.");
+    }
+});
   const chatId = msg.chat.id;
   userCache[chatId] = { photoId: msg.photo[msg.photo.length - 1].file_id };
   
