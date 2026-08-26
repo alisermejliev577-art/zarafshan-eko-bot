@@ -2,7 +2,13 @@ const TelegramBot = require('node-telegram-bot-api');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const express = require('express');
 const https = require('https');
+const TelegramBot = require('node-telegram-bot-api');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const express = require('express');
+const https = require('https');
+const { getRandomAnalysis } = require('./helpers');
 
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 console.log("Проверка ключа Gemini:", process.env.GEMINI_API_KEY ? "Ключ на месте ✅" : "КЛЮЧА НЕТ ❌");
