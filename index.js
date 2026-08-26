@@ -31,7 +31,7 @@ function downloadFileAsBase64(url) {
   });
 }
 
-bot.on('photo', // Команда /start — отправляет приветствие и создает меню кнопок
+// Команда /start — отправляет приветствие и создает меню кнопок
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     
