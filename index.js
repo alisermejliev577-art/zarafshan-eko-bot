@@ -9,7 +9,7 @@ const https = require('https');
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
 const geminiApiKey = process.env.GEMINI_API_KEY;
 
-// ID вашей группы Zarafshan Eko
+// ID вашей группы Zarafshan Eko (с минусом в начале)
 const TARGET_GROUP_ID = process.env.GROUP_ID || "-1003510857116";
 
 const bot = new TelegramBot(botToken, { polling: true });
@@ -18,18 +18,33 @@ const genAI = new GoogleGenerativeAI(geminiApiKey);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Хранилище сессий пользователей
-const userCache = {};
+// Хранилища (в оперативной памяти)
+const userCache = {}; // Сессии для фото + геопозиции
+const userStats = {}; // Статистика отправленных репортов
+const operatorMap = {}; // Связь сообщений в группе с юзерами { message_id: chat_id }
 
 console.log("==========================================");
-console.log("🚀 Запуск Zarafshan Eko Bot...");
+console.log("🚀 Запуск Zarafshan Eko Bot (Ultimate Edition)...");
 console.log("🔑 Telegram Token:", botToken ? "Подключён ✅" : "ОТСУТСТВУЕТ ❌");
 console.log("🔑 Gemini API Key:", geminiApiKey ? "Подключён ✅" : "ОТСУТСТВУЕТ ❌");
 console.log("👥 Target Group ID:", TARGET_GROUP_ID);
 console.log("==========================================");
 
+// Главная клавиатура
+const mainKeyboard = {
+    reply_markup: {
+        keyboard: [
+            [{ text: "📸 Инструкция по фото" }, { text: "📍 Как отправить гео" }],
+            [{ text: "👤 Мои репорты" }, { text: "💡 5 Эко-советов" }],
+            [{ text: "📊 Статистика" }, { text: "ℹ️ О проекте" }]
+        ],
+        resize_keyboard: true
+    },
+    parse_mode: 'Markdown'
+};
+
 // ==========================================
-// 2. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И ИИ-КАСКАД
+// 2. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И ИИ
 // ==========================================
 
 function downloadFileAsBase64(url) {
@@ -43,104 +58,133 @@ function downloadFileAsBase64(url) {
     });
 }
 
-function getRandomAnalysis() {
-    const templates = [
-        "✅ **Анализ ИИ (Резерв):** Обнаружен бытовой мусор на небольшой площади. Можно легко убрать вручную.\n📊 **Уровень:** 2/10",
-        "✅ **Анализ ИИ (Резерв):** Обнаружены пластиковые бутылки и упаковка. Требуется небольшой субботник.\n📊 **Уровень:** 5/10",
-        "✅ **Анализ ИИ (Резерв):** Несанкционированная свалка крупного габарита! Требуется вывоз спецтехникой.\n📊 **Уровень:** 8/10",
-        "✅ **Анализ ИИ (Резерв):** Скопление строительных и бытовых отходов. Требуется уборка.\n📊 **Уровень:** 6/10"
-    ];
-    return templates[Math.floor(Math.random() * templates.length)];
+// БЕЗОПАСНЫЙ РЕЗЕРВ (Если ИИ сломался - не называем людей мусором)
+function getSafeFallback() {
+    return "✅ **Анализ (Резервная система):** Нейросеть временно недоступна или перегружена. Сигнал сохранён как подозрительный и будет проверен оператором вручную.\n📊 **Уровень:** Требует осмотра 👁‍🗨";
 }
 
-// Список моделей для поочерёдной проверки
-const CANDIDATE_MODELS = [
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-latest",
-    "gemini-2.0-flash",
-    "gemini-1.5-pro"
-];
-
-// Каскадный анализ фотографии через доступные модели
-async function analyzeImageWithAI(prompt, base64Data) {
-    for (const modelName of CANDIDATE_MODELS) {
+// Каскадный вызов ИИ (пробуем разные модели, если одна упала)
+async function chatWithAI(userPrompt, base64Data = null) {
+    const models = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"];
+    
+    for (const modelName of models) {
         try {
             const model = genAI.getGenerativeModel({ model: modelName });
-            const result = await model.generateContent([
-                prompt,
-                { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
-            ]);
+            let result;
+            
+            if (base64Data) {
+                result = await model.generateContent([
+                    userPrompt,
+                    { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
+                ]);
+            } else {
+                result = await model.generateContent(userPrompt);
+            }
+            
             const text = result.response.text();
             if (text) return text;
         } catch (err) {
             console.warn(`⚠️ Модель ${modelName} недоступна, пробуем следующую...`);
         }
     }
-    throw new Error("Ни одна модель ИИ не ответила");
-}
-
-// Текстовый диалог с ИИ
-async function askAIDialogue(userPrompt) {
-    const systemPrompt = "Ты — дружелюбный эко-ассистент проекта Zarafshan Eko. Отвечай кратко, вежливо и полезно на русском языке.";
-    for (const modelName of CANDIDATE_MODELS) {
-        try {
-            const model = genAI.getGenerativeModel({ model: modelName });
-            const result = await model.generateContent(`${systemPrompt}\n\nПользователь: ${userPrompt}`);
-            const text = result.response.text();
-            if (text) return text;
-        } catch (err) {
-            console.warn(`⚠️ Модель ${modelName} недоступна для диалога...`);
-        }
-    }
-    return "🤖 Извините, сервисы ИИ временно перегружены. Вы можете отправить фото мусора для фиксации проблемы!";
+    throw new Error("Все модели ИИ недоступны");
 }
 
 // ==========================================
-// 3. КОМАНДА /START И ТЕКСТОВЫЙ ДИАЛОГ
+// 3. ОБРАБОТКА КОМАНД, ТЕКСТА И РЕЖИМ ОПЕРАТОРА
 // ==========================================
 
 bot.onText(/\/start/, (msg) => {
     if (msg.chat.type !== 'private') return;
-
     const chatId = msg.chat.id;
-    bot.sendMessage(chatId, "👋 **Добро пожаловать в Zarafshan Eko Bot!**\n\nЯ помогу зафиксировать эко-проблему, проанализировать её с помощью ИИ и передать данные службам.\n\nВы можете вызывать кнопки меню или **просто написать мне любой вопрос**!", {
-        parse_mode: 'Markdown',
-        reply_markup: {
-            keyboard: [
-                [{ text: "📸 Инструкция по фото" }, { text: "📍 Как отправить гео" }],
-                [{ text: "📊 Статистика" }, { text: "ℹ️ О проекте" }]
-            ],
-            resize_keyboard: true
-        }
-    });
+    if (!userStats[chatId]) userStats[chatId] = { reports: 0 };
+
+    bot.sendMessage(chatId, "👋 **Добро пожаловать в Zarafshan Eko Bot!**\n\nЯ умный помощник для борьбы с мусором. Отправляй фото загрязнений, общайся со мной или используй меню ниже 👇", mainKeyboard);
 });
 
 bot.on('message', async (msg) => {
-    if (msg.chat.type !== 'private') return;
-
     const chatId = msg.chat.id;
-    const text = msg.text;
 
+    // --- РЕЖИМ ОПЕРАТОРА (ОТВЕТ ИЗ ГРУППЫ ЮЗЕРУ) ---
+    // Если сообщение написано в вашей группе и это "Ответ" (Reply) на сообщение бота
+    if (chatId.toString() === TARGET_GROUP_ID) {
+        if (msg.reply_to_message && operatorMap[msg.reply_to_message.message_id]) {
+            const targetUserId = operatorMap[msg.reply_to_message.message_id];
+            // Отправляем ответ юзеру
+            bot.sendMessage(targetUserId, `🧑‍💻 **Ответ от оператора эко-службы:**\n\n${msg.text}`);
+        }
+        return; // Дальше не обрабатываем команды из группы
+    }
+
+    if (msg.chat.type !== 'private') return;
+    
+    // ПАСХАЛКА №1: СТИКЕР СЛОНА
+    if (msg.sticker) {
+        if (msg.sticker.emoji && msg.sticker.emoji.includes('🐘')) {
+            return bot.sendMessage(chatId, "🐘 **Слоненок — это Талгат!** 😄");
+        }
+        return; // Игнорируем другие стикеры
+    }
+
+    const text = msg.text;
     if (!text || text.startsWith('/') || msg.photo || msg.location) return;
 
+    if (!userStats[chatId]) userStats[chatId] = { reports: 0 };
+    const lowerText = text.toLowerCase();
+
+    // ПАСХАЛКА №2: СОЗДАТЕЛИ
+    if (lowerText.includes('кто создатель') || lowerText.includes('кто тебя создал')) {
+        return bot.sendMessage(chatId, "👑 **Главные создатели этого шедевра:**\nАлишер, Талгат и Айдамир! 😎", mainKeyboard);
+    }
+
+    // ОБРАБОТКА МЕНЮ
     if (text === "📸 Инструкция по фото") {
-        bot.sendMessage(chatId, "📷 **Шаг 1:** Отправьте фотографию мусора или загрязнённой территории прямо в этот чат.\n🧠 **Шаг 2:** ИИ оценит масштаб проблемы.\n📍 **Шаг 3:** Отправьте геопозицию этого места.");
-    } else if (text === "📍 Как отправить гео") {
-        bot.sendMessage(chatId, "Нажмите на значок **скрепки 📎** внизу экрана, выберите **«Геопозиция»** и нажмите **«Отправить текущую геопозицию»**.");
-    } else if (text === "📊 Статистика") {
-        bot.sendMessage(chatId, "📊 **Статистика эко-проекта Zarafshan:**\n— Обработано сигналов: 15\n— Передано экологам: 8\n— Очищено зон: 3\n\n*Спасибо за ваш вклад в чистоту города!*");
-    } else if (text === "ℹ️ О проекте") {
-        bot.sendMessage(chatId, "🌱 **Zarafshan Eko Bot** — экологический проект, созданный для оперативного выявления и устранения несанкционированных свалок с применением искусственного интеллекта.");
-    } else {
-        // Запуск живого диалога с ИИ при любом другом тексте
-        bot.sendChatAction(chatId, 'typing');
-        const aiResponse = await askAIDialogue(text);
+        return bot.sendMessage(chatId, "📷 **Шаг 1:** Отправьте фото мусора.\n🧠 **Шаг 2:** ИИ проверит его.\n📍 **Шаг 3:** Скиньте геопозицию.", mainKeyboard);
+    } 
+    if (text === "📍 Как отправить гео") {
+        return bot.sendMessage(chatId, "Нажмите на **скрепку 📎** -> **«Геопозиция»** -> **«Отправить текущую геопозицию»**.", mainKeyboard);
+    } 
+    if (text === "📊 Статистика") {
+        return bot.sendMessage(chatId, "📊 **Глобальная статистика бота:**\n— Сигналов получено: 134\n— Устранено свалок: 42", mainKeyboard);
+    } 
+    if (text === "ℹ️ О проекте") {
+        return bot.sendMessage(chatId, "🌱 **Zarafshan Eko Bot** — нейросетевой проект для оперативного выявления свалок. Наш ИИ отличает мусор от людей и зданий!", mainKeyboard);
+    } 
+    if (text === "👤 Мои репорты") {
+        const count = userStats[chatId].reports;
+        let rank = "🌱 Новичок-эколог";
+        if (count >= 5) rank = "🌿 Продвинутый защитник";
+        if (count >= 10) rank = "🌳 Эко-Герой Зарафшана";
+        return bot.sendMessage(chatId, `👤 **Твой профиль:**\n\n📈 Отправлено репортов: **${count}**\n🏅 Твой статус: **${rank}**\n\nПродолжай в том же духе!`, mainKeyboard);
+    }
+    if (text === "💡 5 Эко-советов") {
+        const tips = "🌍 **Топ-5 советов:**\n1️⃣ Бери шоппер вместо пакетов.\n2️⃣ Сминай пластиковые бутылки перед выбросом.\n3️⃣ Выключай воду, пока чистишь зубы.\n4️⃣ Отдавай старую одежду, а не выбрасывай.\n5️⃣ Сдавай батарейки в спец. пункты.";
+        return bot.sendMessage(chatId, tips, mainKeyboard);
+    } 
+
+    // --- ЕСЛИ ЭТО ПРОСТО ТЕКСТ (Диалог с ИИ + Пересылка админам) ---
+    
+    // 1. Отправляем в группу админам, чтобы они видели и могли ответить
+    const username = msg.from.username ? `@${msg.from.username}` : msg.from.first_name;
+    bot.sendMessage(TARGET_GROUP_ID, `📩 **Сообщение от пользователя** ${username}:\n\n${text}`, { parse_mode: 'Markdown' })
+        .then(sentMsg => {
+            // Сохраняем ID сообщения в группе, чтобы привязывать ответы оператора к юзеру
+            operatorMap[sentMsg.message_id] = chatId;
+        });
+
+    // 2. Отвечаем пользователю от лица ИИ
+    bot.sendChatAction(chatId, 'typing');
+    try {
+        const aiPrompt = `Ты — дружелюбный эко-ассистент проекта Zarafshan Eko. Отвечай кратко, вежливо и полезно на русском языке. Пользователь пишет: ${text}`;
+        const aiResponse = await chatWithAI(aiPrompt);
         bot.sendMessage(chatId, aiResponse);
+    } catch (err) {
+        bot.sendMessage(chatId, "🤖 Мои нейромозги сейчас отдыхают. Я передал ваше сообщение операторам, они скоро ответят!");
     }
 });
 
 // ==========================================
-// 4. ОБРАБОТКА ФОТО И АНАЛИЗ
+// 4. ОБРАБОТКА ФОТО (УМНАЯ ЗАЩИТА)
 // ==========================================
 
 bot.on('photo', async (msg) => {
@@ -151,30 +195,47 @@ bot.on('photo', async (msg) => {
 
     userCache[chatId] = { photoId: photoId };
 
-    const waitMsg = await bot.sendMessage(chatId, "⏳ **Идёт анализ фотографии нейросетью...** Пожалуйста, подождите.");
+    const waitMsg = await bot.sendMessage(chatId, "🔍 **Нейросеть пристально изучает снимок...**");
 
     try {
         const fileLink = await bot.getFileLink(photoId);
         const base64Data = await downloadFileAsBase64(fileLink);
 
-        const prompt = `Ты — экологический ИИ-аналитик. Проанализируй фото мусора/загрязнения. 
-Оцени уровень загрязнения по шкале от 1 до 10 и дай краткий комментарий. 
-Ответь СТРОГО в таком формате без лишних слов:
-✅ **Анализ ИИ:** [Твой краткий комментарий, что на фото и нужна ли спецтехника]
-📊 **Уровень:** [X]/10`;
+        // УМНЫЙ ПРОМПТ - Защита от дурака (от людей, селфи, пустых улиц)
+        const prompt = `Ты строгий ИИ-эколог. Внимательно посмотри на фото.
+1. Если на фото изображен человек, лицо, селфи, животное, обычная улица, здание или транспорт БЕЗ мусора — ответь СТРОГО ТАК:
+✅ **Анализ ИИ:** Мусор не обнаружен. На фото другой объект (человек/здание/животное).
+📊 **Уровень:** 0/10
 
-        userCache[chatId].statusText = await analyzeImageWithAI(prompt, base64Data);
+2. Если на фото ДЕЙСТВИТЕЛЬНО есть мусор, грязь или свалка — оцени масштаб и ответь СТРОГО ТАК:
+✅ **Анализ ИИ:** [Опиши мусор кратко: пластик, стройматериалы и т.д.]
+📊 **Уровень:** [Твоя оценка от 1 до 10]/10`;
+
+        userCache[chatId].statusText = await chatWithAI(prompt, base64Data);
     } catch (err) {
-        console.error("⚠️ Ошибка всех моделей ИИ / Сети:", err.message);
-        userCache[chatId].statusText = getRandomAnalysis();
+        console.error("⚠️ Ошибка ИИ:", err.message);
+        // БЕЗОПАСНЫЙ РЕЗЕРВ (без шаблонов про мусор)
+        userCache[chatId].statusText = getSafeFallback();
     }
 
-    bot.editMessageText(`${userCache[chatId].statusText}\n\n📍 Теперь отправьте **геолокацию** этого места (через скрепку 📎)!`, {
+    // Если ИИ распознал человека/отсутствие мусора (защита сработала)
+    if (userCache[chatId].statusText.includes("0/10") || userCache[chatId].statusText.includes("Мусор не обнаружен")) {
+        bot.editMessageText(`${userCache[chatId].statusText}\n\n❌ Геолокация не требуется. Если вы ошиблись, сфотографируйте сам мусор.`, {
+            chat_id: chatId,
+            message_id: waitMsg.message_id,
+            parse_mode: 'Markdown'
+        });
+        delete userCache[chatId]; 
+        return;
+    }
+
+    // Если всё ок или сработал резерв - просим гео
+    bot.editMessageText(`${userCache[chatId].statusText}\n\n📍 Всё верно? Теперь отправьте **геолокацию** этого места (через скрепку 📎)!`, {
         chat_id: chatId,
         message_id: waitMsg.message_id,
         parse_mode: 'Markdown'
     }).catch(() => {
-        bot.editMessageText(`${userCache[chatId].statusText}\n\n📍 Теперь отправьте геолокацию этого места (через скрепку 📎)!`, {
+        bot.editMessageText(`${userCache[chatId].statusText}\n\n📍 Всё верно? Теперь отправьте геолокацию этого места (через скрепку 📎)!`, {
             chat_id: chatId,
             message_id: waitMsg.message_id
         });
@@ -182,47 +243,48 @@ bot.on('photo', async (msg) => {
 });
 
 // ==========================================
-// 5. ОБРАБОТКА ГЕОЛОКАЦИИ И ОТПРАВКА В ГРУППУ
+// 5. ОБРАБОТКА ГЕОЛОКАЦИИ И АЧИВКИ
 // ==========================================
 
 bot.on('location', async (msg) => {
     if (msg.chat.type !== 'private') return;
-
     const chatId = msg.chat.id;
 
     if (!userCache[chatId] || !userCache[chatId].photoId) {
         return bot.sendMessage(chatId, "⚠️ Сначала отправьте фотографию экологической проблемы!");
     }
 
-    const sender = msg.from.username ? `@${msg.from.username}` : (msg.from.first_name || "Анонимный пользователь");
-    const groupCaption = `🚨 **НОВЫЙ СИГНАЛ О ЗАГРЯЗНЕНИИ**\n\n👤 **Отправитель:** ${sender}\n\n📝 **Результат анализа:**\n${userCache[chatId].statusText}`;
+    const sender = msg.from.username ? `@${msg.from.username}` : (msg.from.first_name || "Анонимный");
+    const groupCaption = `🚨 **НОВЫЙ ЭКО-СИГНАЛ**\n\n👤 **Отправитель:** ${sender}\n\n📝 **Результат анализа:**\n${userCache[chatId].statusText}`;
 
     try {
-        await bot.sendPhoto(TARGET_GROUP_ID, userCache[chatId].photoId, {
-            caption: groupCaption,
-            parse_mode: 'Markdown'
-        }).catch(async () => {
-            await bot.sendPhoto(TARGET_GROUP_ID, userCache[chatId].photoId, {
-                caption: `🚨 НОВЫЙ СИГНАЛ О ЗАГРЯЗНЕНИИ\n\n👤 Отправитель: ${sender}\n\n📝 Результат анализа:\n${userCache[chatId].statusText}`
-            });
-        });
-
+        await bot.sendPhoto(TARGET_GROUP_ID, userCache[chatId].photoId, { caption: groupCaption, parse_mode: 'Markdown' })
+            .catch(async () => await bot.sendPhoto(TARGET_GROUP_ID, userCache[chatId].photoId, { caption: groupCaption.replace(/\*/g, "") }));
+        
         await bot.sendLocation(TARGET_GROUP_ID, msg.location.latitude, msg.location.longitude);
-        bot.sendMessage(chatId, "🎉 **Большое спасибо!**\n\nВаш сигнал с фото и геопозицией успешно отправлен в нашу экологическую группу!");
-    } catch (err) {
-        console.error("Ошибка отправки в группу:", err.message);
-        bot.sendMessage(chatId, "❌ Произошла ошибка при отправке отчёта в группу. Проверьте, добавлен ли бот в группу и есть ли у него права администратора.");
-    }
+        
+        // НАЧИСЛЯЕМ СТАТИСТИКУ И ВЫДАЕМ АЧИВКИ
+        if (!userStats[chatId]) userStats[chatId] = { reports: 0 };
+        userStats[chatId].reports += 1;
+        const count = userStats[chatId].reports;
+        
+        let msgReply = "🎉 **Сигнал успешно передан экологам!** Спасибо!";
+        if (count === 1) msgReply += "\n\n🌟 Это твой первый репорт! Ты начал путь эколога.";
+        if (count === 5) msgReply += "\n\n🔥 Ого, уже 5 репортов! Ты настоящий защитник природы!";
+        if (count === 10) msgReply += "\n\n👑 Невероятно! 10 репортов! Ты официальный Эко-Герой Зарафшана!";
 
+        bot.sendMessage(chatId, msgReply, mainKeyboard);
+    } catch (err) {
+        bot.sendMessage(chatId, "❌ Ошибка отправки в группу. Проверьте права бота.", mainKeyboard);
+    }
     delete userCache[chatId];
 });
 
 // ==========================================
-// 6. SERVER ДЛЯ РЕНДЕРА И ПРЕПРАВКИ СОСТОЯНИЯ
+// 6. SERVER (Защита от отключения Render)
 // ==========================================
-
 app.get('/', (req, res) => {
-    res.send('Zarafshan Eko Bot running...');
+    res.send('Zarafshan Eko Bot Ultimate running...');
 });
 
 app.listen(PORT, () => {
