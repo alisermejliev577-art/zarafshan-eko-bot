@@ -2,7 +2,14 @@ const TelegramBot = require('node-telegram-bot-api');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const express = require('express');
 const https = require('https');
-const { getRandomAnalysis } = require('./helpers');
+function getRandomAnalysis() {
+    const results = [
+        "🟢 **Уровень загрязнения:** Низкий (1-3/10)\nНебольшой бытовой мусор. Можно легко убрать вручную.",
+        "🟡 **Уровень загрязнения:** Средний (4-6/10)\nОбнаружено скопление пластика и упаковки. Требуется субботник.",
+        "🔴 **Уровень загрязнения:** Высокий (7-10/10)\nКрупная несанкционированная свалка! Данные переданы на карту."
+    ];
+    return results[Math.floor(Math.random() * results.length)];
+}
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
